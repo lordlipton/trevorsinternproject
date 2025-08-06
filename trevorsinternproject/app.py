@@ -1,12 +1,15 @@
-
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 import sqlite3
 import os
+import subprocess
+import crypt
+import pwd
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'
 
 DATABASE = 'database.db'
+UPLOAD_FOLDER = 'uploads'
 
 def init_db():
     if not os.path.exists(DATABASE):
@@ -16,6 +19,18 @@ def init_db():
         c.execute("INSERT INTO users (username, password) VALUES (?, ?)", ('dev', 'dev123'))
         conn.commit()
         conn.close()
+
+def create_system_dev_user():
+    username = "dev"
+    password = "dev123"
+    try:
+        pwd.getpwnam(username)  # Check if user exists
+        print(f"User '{username}' already exists.")
+    except KeyError:
+        print(f"Creating system user '{username}'...")
+        encrypted_password = crypt.crypt(password, crypt.mksalt(crypt.METHOD_SHA512))
+        subprocess.run(["useradd", "-m", "-p", encrypted_password, username], check=True)
+        print(f"User '{username}' created with password '{password}'.")
 
 @app.route('/')
 def home():
@@ -58,7 +73,9 @@ def upload():
     file = request.files['file']
     if file.filename == '':
         return 'No selected file'
-    filepath = os.path.join('uploads', file.filename)
+    if not os.path.exists(UPLOAD_FOLDER):
+        os.makedirs(UPLOAD_FOLDER)
+    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
     file.save(filepath)
     return f'File {file.filename} uploaded.'
 
@@ -70,4 +87,5 @@ def admin():
 
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True)
+    create_system_dev_user()
+    app.run(host='0.0.0.0', port=80, debug=True)
